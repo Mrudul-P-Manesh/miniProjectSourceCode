@@ -33,6 +33,10 @@ Added function wipeDatabase() as Option 7. Overwrites all 100 record slots with 
 **Phone Number Field**
 Added a phone[15] field to the clientData struct. The add, update, and accounts.txt export functions have been updated to include this field.
 
+**Sort accounts**
+
+Added a sorting feature that displays all active accounts in ascending order by either customer name or account balance using qsort()
+
 ---
 
 ## UI Changes
