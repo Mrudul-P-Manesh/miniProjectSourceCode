@@ -23,7 +23,13 @@ void newRecord(FILE *fPtr);
 void deleteRecord(FILE *fPtr);
 void searchByName(FILE *fPtr);
 void calculateTotals(FILE *fPtr);
+void sortAccounts(FILE *fPtr);
 void wipeDatabase(FILE *fPtr);
+int loadActiveAccounts(FILE *fPtr, struct clientData clients[], int maxClients);
+void printAccounts(const struct clientData clients[], int count);
+int compareByName(const void *a, const void *b);
+int compareByBalance(const void *a, const void *b);
+void logTransaction(unsigned int account, double transaction, double balance);
 
 int main(int argc, char *argv[])
 {
@@ -53,7 +59,7 @@ int main(int argc, char *argv[])
     }
 
     // enable user to specify action
-    while ((choice = enterChoice()) != 8)
+    while ((choice = enterChoice()) != 9)
     {
         switch (choice)
         {
@@ -81,8 +87,12 @@ int main(int argc, char *argv[])
         case 6:
             calculateTotals(cfPtr);
             break;
-        // wipe entire database
+        // sort accounts
         case 7:
+            sortAccounts(cfPtr);
+            break;
+        // wipe entire database
+        case 8:
             wipeDatabase(cfPtr);
             break;
         // display if user does not select valid choice
@@ -178,6 +188,7 @@ void updateRecord(FILE *fPtr)
         fseek(fPtr, -(long)sizeof(struct clientData), SEEK_CUR);
         // write updated record over old record in file
         fwrite(&client, sizeof(struct clientData), 1, fPtr);
+        logTransaction(client.acctNum, transaction, client.balance);
     } // end else
 } // end function updateRecord
 
@@ -324,6 +335,47 @@ void calculateTotals(FILE *fPtr)
     printf("--------------------\n\n");
 } // end function calculateTotals
 
+// display all active accounts sorted by user preference
+void sortAccounts(FILE *fPtr)
+{
+    struct clientData clients[100];
+    int clientCount;
+    unsigned int sortChoice;
+
+    clientCount = loadActiveAccounts(fPtr, clients, 100);
+
+    if (clientCount == 0)
+    {
+        printf("\nNo active accounts found to sort.\n");
+        return;
+    }
+
+    printf("\nSort accounts by:\n");
+    printf("1 - Name\n");
+    printf("2 - Balance\n");
+    printf("Enter your choice: ");
+
+    while (scanf("%u", &sortChoice) != 1 || (sortChoice != 1 && sortChoice != 2))
+    {
+        while (getchar() != '\n')
+            ;
+        printf("Invalid input. Enter 1 for name or 2 for balance: ");
+    }
+
+    if (sortChoice == 1)
+    {
+        qsort(clients, (size_t)clientCount, sizeof(struct clientData), compareByName);
+        printf("\nAccounts sorted by name:\n");
+    }
+    else
+    {
+        qsort(clients, (size_t)clientCount, sizeof(struct clientData), compareByBalance);
+        printf("\nAccounts sorted by balance:\n");
+    }
+
+    printAccounts(clients, clientCount);
+} // end function sortAccounts
+
 // completely wipe the database and create 100 blank records
 void wipeDatabase(FILE *fPtr)
 {
@@ -380,8 +432,9 @@ unsigned int enterChoice(void)
                  "4 - Delete an account\n"
                  "5 - Search by name\n"
                  "6 - Calculate bank totals\n"
-                 "7 - WIPE ENTIRE DATABASE\n"
-                 "8 - End program\n"
+                 "7 - Sort accounts\n"
+                 "8 - WIPE ENTIRE DATABASE\n"
+                 "9 - End program\n"
                  "========================================\n"
                  "Enter your choice: ");
 
@@ -392,3 +445,92 @@ unsigned int enterChoice(void)
     }
     return menuChoice;
 } // end function enterChoice
+
+// load all non-empty accounts into an array for sorting/reporting
+int loadActiveAccounts(FILE *fPtr, struct clientData clients[], int maxClients)
+{
+    struct clientData client = {0, "", "", "", 0.0};
+    int count = 0;
+
+    rewind(fPtr);
+
+    while (count < maxClients && fread(&client, sizeof(struct clientData), 1, fPtr) == 1)
+    {
+        if (client.acctNum != 0)
+        {
+            clients[count++] = client;
+        }
+    }
+
+    return count;
+}
+
+// print account rows in a consistent table layout
+void printAccounts(const struct clientData clients[], int count)
+{
+    int i;
+
+    printf("\n%-6s%-16s%-11s%-16s%10s\n", "Acct", "Last Name", "First Name", "Phone", "Balance");
+
+    for (i = 0; i < count; ++i)
+    {
+        printf("%-6d%-16s%-11s%-16s%10.2f\n", clients[i].acctNum, clients[i].lastName,
+               clients[i].firstName, clients[i].phone, clients[i].balance);
+    }
+}
+
+// sort by last name, then first name, then account number
+int compareByName(const void *a, const void *b)
+{
+    const struct clientData *clientA = (const struct clientData *)a;
+    const struct clientData *clientB = (const struct clientData *)b;
+    int lastNameResult = strcmp(clientA->lastName, clientB->lastName);
+
+    if (lastNameResult != 0)
+    {
+        return lastNameResult;
+    }
+
+    {
+        int firstNameResult = strcmp(clientA->firstName, clientB->firstName);
+        if (firstNameResult != 0)
+        {
+            return firstNameResult;
+        }
+    }
+
+    return (clientA->acctNum > clientB->acctNum) - (clientA->acctNum < clientB->acctNum);
+}
+
+// sort by balance from low to high, then by account number
+int compareByBalance(const void *a, const void *b)
+{
+    const struct clientData *clientA = (const struct clientData *)a;
+    const struct clientData *clientB = (const struct clientData *)b;
+
+    if (clientA->balance < clientB->balance)
+    {
+        return -1;
+    }
+    if (clientA->balance > clientB->balance)
+    {
+        return 1;
+    }
+
+    return (clientA->acctNum > clientB->acctNum) - (clientA->acctNum < clientB->acctNum);
+}
+
+// append each balance update to a transaction history file
+void logTransaction(unsigned int account, double transaction, double balance)
+{
+    FILE *historyFile = fopen("transactions.txt", "a");
+
+    if (historyFile == NULL)
+    {
+        printf("Warning: transaction history could not be updated.\n");
+        return;
+    }
+
+    fprintf(historyFile, "Account %u | %+0.2f | Balance: %.2f\n", account, transaction, balance);
+    fclose(historyFile);
+}
