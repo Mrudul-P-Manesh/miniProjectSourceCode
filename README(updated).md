@@ -39,7 +39,7 @@ Added a sorting feature that displays all active accounts in ascending order by 
 
 ---
 
-## UI Changes
+## CLI Changes
 
 - Screen is cleared before the menu is displayed on each loop using system("cls")
 - A fixed header "BANK MANAGEMENT SYSTEM" is displayed at the top of every screen
